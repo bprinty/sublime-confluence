@@ -1,0 +1,4 @@
+confluence.log
+servers
+*.pyc
+cflu/*.pyc
