@@ -8,7 +8,7 @@
 
 # config
 # ------
-VERSION   = 0.0.1
+VERSION := `cd cflu && python -c 'from __init__ import __version__; print __version__'`
 
 
 # targets
@@ -23,6 +23,6 @@ test:
 
 
 release: test
-	git tag -d $(TAG) || echo "local tag available"
-	git push origin :$(TAG) || echo "remote tag available"
-	git tag $(TAG) && git push origin $(TAG)
+	TAG=${VERSION} && git tag -d $(TAG) || echo "local tag available"
+	TAG=${VERSION} && git push origin :$(TAG) || echo "remote tag available"
+	TAG=${VERSION} && git tag $(TAG) && git push origin $(TAG)
