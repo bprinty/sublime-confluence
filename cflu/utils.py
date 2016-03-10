@@ -11,14 +11,18 @@
 import sublime
 import os
 import logging
+import urllib # python 2/3 problems
+import base64
 import json
 import re
+from html.parser import HTMLParser
 
 
 # config
 # ------
 active_window = None
 current_instance = None
+current_config = {}
 existing_instances = []
 
 pwd = os.path.dirname(os.path.realpath(__file__))
@@ -45,25 +49,40 @@ def update_instancelist(func):
 # functions
 # ---------
 def load_config(name):
+    global current_config
     with open(os.path.join(server_path, name + '.json'), 'r') as fi:
         content = re.sub(r'[^:]//.+?\n', '', ''.join(fi.readlines()))
         content = re.sub(r'\s+', '', content)
         data = json.loads(content)
-    return data
+    current_config = data
+    return
 
 
-def validate_instance(name):
-    
-    def store_pass(passwd):
-        data['password'] = passwd
-        return data
-
-    data = load_config(name)
-    assert data.get('url') is not None, 'No URL defined!'
-    assert data.get('username') is not None, 'No username defined!'
-    if data.get('password') is None:
-        return show_input_panel('Enter Password:', '', store_pass)
-    return data
+def validate_config(config):
+    if config.get('url') is None:
+        return False
+    if config.get('username') is None:
+        return False
+    if config.get('password') is None:
+        return False
+    try:
+        req = urllib.request.Request(
+            '{}/confluence/rest/api/space'.format(config.get('url')),
+            headers={
+                'Authorization': 'Basic {}'.format(base64.b64encode(
+                    str.encode('{}:{}'.format(
+                        config.get('username'),
+                        config.get('password')
+                    ))
+                ).decode('utf-8')),
+                'Accept': 'application/json'
+            },
+            method='GET'
+        )
+        urllib.request.urlopen(req)
+    except urllib.error.HTTPError:
+        return False
+    return True
 
 
 def show_quick_panel(items, callback, monospace=False):
@@ -87,3 +106,42 @@ def show_input_panel(caption, text, callback):
         callback, None, None
     ), 0)
   return
+
+
+# editors
+# -------
+class HTMLEditor(HTMLParser):
+    _cache = ''
+    _tabs = 0
+
+    def handle_starttag(self, tag, attrs):
+        self._cache += '\t'*self._tabs
+        self._cache += '<{}'.format(tag)
+        self._cache += ''.join([' {}="{}"'.format(i[0], i[1]) for i in attrs])
+        self._cache += '>\n'
+        self._tabs += 1
+
+    def handle_endtag(self, tag):
+        self._tabs -= 1
+        self._cache += '\t'*self._tabs
+        self._cache += '</{}>\n'.format(tag)
+
+    def handle_data(self, data):
+        self._cache += '\t'*self._tabs
+        self._cache += '{}\n'.format(data)
+
+    def parse(self, html):
+        self._cache = ''
+        self.feed(html)
+        return re.sub("\n\s+\n", "\n", self._cache)
+
+
+class MarkdownEditor(HTMLParser):
+    pass
+
+
+class Editors():
+    html = HTMLEditor()
+    markdown = MarkdownEditor()
+
+editors = Editors()

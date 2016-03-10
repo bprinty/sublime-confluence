@@ -1,3 +1,3 @@
 [
-	{"keys": ["ctrl+shift+c"], "command": "confluence"}
+	{"keys": ["ctrl+shift+c"], "command": "confluence_menu"}
 ]

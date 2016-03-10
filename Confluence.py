@@ -14,6 +14,7 @@ import logging
 import imp
 import os
 import json
+import xml.etree.ElementTree as etree
 
 # internal
 try:
@@ -27,6 +28,19 @@ orm = imp.reload(orm)
 
 # classes
 # -------
+class ConfluencePushPage(sublime_plugin.EventListener):
+    def on_post_save_async(self, view):
+        base = os.path.basename(view.file_name())
+        if '.sublime-confluence-' in base:
+            ident = int(base.replace('.sublime-confluence-', ''))
+            page = orm.Page(ident)
+            with open(view.file_name()) as fi:
+                contents = fi.read()
+            page.body = contents
+            page.push()
+        return
+
+
 class ConfluenceMenuCommand(sublime_plugin.WindowCommand):
     """
     Mode of interaction for package.
@@ -66,6 +80,8 @@ class ConfluenceNewCommand(sublime_plugin.WindowCommand):
     // server
     "url": "http://user.atlassian.net",
     // "url": "http://host:port",
+    "editor": "html",
+    // "editor": "markdown",
 
     // credentials
     "username": "user",
@@ -130,10 +146,23 @@ class ConfluenceSelectCommand(sublime_plugin.WindowCommand):
         """
         utils.active_window = self.window
 
+        def validate():
+            return
+
         def done(idx):
-            if idx >= 0:
+            if isinstance(idx, str):
+                utils.current_config['password'] = idx
+                if not utils.validate_config(utils.current_config):
+                    utils.show_input_panel('Enter Password:', '', done)
+                else:
+                    self.window.run_command('confluence_navigate')
+            elif idx >= 0:
                 utils.current_instance = utils.existing_instances[idx]
-                self.window.run_command('confluence_navigate')
+                utils.load_config(utils.current_instance)
+                if not utils.validate_config(utils.current_config):
+                    utils.show_input_panel('Enter Password:', '', done)
+                else:
+                    self.window.run_command('confluence_navigate')
             return
 
         utils.show_quick_panel(utils.existing_instances, done, monospace=True)
@@ -150,18 +179,59 @@ class ConfluenceNavigateCommand(sublime_plugin.WindowCommand):
         Main logic for managing quick panel.
         """
         utils.active_window = self.window
-        self.instance = orm.instance(utils.validate_instance(utils.current_instance))
-        self.navigator()
+        self.instance = orm.Instance(
+            url=utils.current_config.get('url'),
+            username=utils.current_config.get('username'),
+            password=utils.current_config.get('password')
+        )
+        self.instance.update()
+        self.space_navigate()
         return
 
-    def navigator(self):
+    def space_navigate(self):
         def done(idx):
             if idx < 0:
                 utils.logging.info('Done navigating')
             else:
-                utils.logging.info('Navigating to {}'.format(idx))
+                self.page_navigate(self.instance.spaces[idx].pages)
             return
-        print(self.instance.content)
-        utils.show_quick_panel(['..', 'page1', 'page2'], done, monospace=True)
+        utils.show_quick_panel([[d.key, d.name] for d in self.instance.spaces], done, monospace=True)
+        return
+
+    def page_navigate(self, pages, prev=None):
+        def done(idx):
+            def edit(eidx):
+                if eidx < 0:
+                    utils.logging.info('Done navigating')
+                # elif idx == 0:
+                #     self.page_navigate(pages, prev=oprev)
+                elif eidx == 1:
+                    utils.logging.info('Editing page')
+                    tfile = '.sublime-confluence-{}'.format(pages[idx-1].ident)
+                    if os.path.exists(tfile):
+                        os.remove(tfile)
+                    with open(tfile, 'w') as fi:
+                        fi.write(utils.editors.html.parse(pages[idx-1].body))
+                    self.window.open_file(tfile)
+                elif eidx == 2:
+                    utils.logging.info('Deleting page')
+                return
+            if idx < 0:
+                utils.logging.info('Done navigating')
+            elif idx == 0:
+                if prev is None:
+                    self.space_navigate()
+                else:
+                    self.page_navigate(prev)
+            else:
+                if len(pages[idx-1].children) > 1:
+                    self.page_navigate(pages[idx-1].children, prev=pages)
+                else:
+                    utils.show_quick_panel([
+                        ['..'],
+                        ['Edit Page', 'edit existing page in new tab'],
+                        ['Delete Page', 'delete page on confluence']
+                    ], edit, monospace=True)
+        utils.show_quick_panel(['..'] + [d.name for d in pages], done, monospace=True)
         return
 

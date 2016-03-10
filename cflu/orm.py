@@ -10,7 +10,13 @@
 # -------
 import urllib # python 2/3 problems
 import json
+import re
 import base64
+
+
+# config
+# ------
+open_instance = None
 
 
 # decorators
@@ -38,36 +44,148 @@ class cached_property(object):
 class Instance(object):
 
     def __init__(self, url, username, password):
+        global open_instance
         self.url = url
-        self.api = '{}/rest/api'.format(self.url)
+        self.api = '{}/wiki/rest/api'.format(self.url)
         self.headers = {
             'Authorization': 'Basic {}'.format(base64.b64encode(str.encode('{}:{}'.format(username, password))).decode('utf-8')),
-            'Accept': 'application/json'
+            'Accept': 'application/json',
+            'Content-Type': 'application/json'
         }
-        print(self.headers)
+        self._data = None
+        open_instance = self
         return
 
-    @cached_property
-    def content(self):
+    def update(self):
         req = urllib.request.Request(
-            '{}/content'.format(self.api),
+            '{}/space'.format(self.api),
             headers=self.headers,
             method='GET'
         )
         data = {}
         with urllib.request.urlopen(req) as rdata:
             data = json.loads(rdata.read().decode('utf-8'))
-        return data
+        self._data = data['results']
+        return
+
+    @property
+    def spaces(self):
+        if self._data is None:
+            self.update()
+        return [Space(d['key'], d['name']) for d in self._data]
 
 
-# functions
-# ---------
-def instance(config):
-    print(config.get('username'))
-    print(config.get('password'))
-    return Instance(
-        url='{}/confluence'.format(config.get('url')),
-        username=config.get('username'),
-        password=config.get('password')
-    )
+class Space(object):
+
+    def __init__(self, key, name=None):
+        global open_instance
+        self.key = key
+        self.name = name
+        self.instance = open_instance
+        self._data = None
+        return
+
+    def update(self):
+        req = urllib.request.Request(
+            '{}/space/{}/content'.format(self.instance.api, self.key),
+            headers=self.instance.headers,
+            method='GET'
+        )
+        data = {}
+        with urllib.request.urlopen(req) as rdata:
+            data = json.loads(rdata.read().decode('utf-8'))
+        self._data = data['page']['results']
+        return
+
+    @property
+    def pages(self):
+        if self._data is None:
+            self.update()
+        return [Page(d['id']) for d in self._data]
+
+
+class Page(object):
+
+    def __init__(self, ident):
+        global open_instance
+        self.ident = ident
+        self.instance = open_instance
+        self._data = None
+        self._children = None
+        self._body_cache = None
+        return
+
+    def update(self):
+        req = urllib.request.Request(
+            '{}/content/{}?expand=body.view,version'.format(self.instance.api, self.ident),
+            headers=self.instance.headers,
+            method='GET'
+        )
+        data = {}
+        with urllib.request.urlopen(req) as rdata:
+            data = json.loads(rdata.read().decode('utf-8'))
+        self._data = data
+        return
+
+    def update_children(self):
+        req = urllib.request.Request(
+            '{}/content/{}/child/page'.format(self.instance.api, self.ident),
+            headers=self.instance.headers,
+            method='GET'
+        )
+        data = {}
+        with urllib.request.urlopen(req) as rdata:
+            data = json.loads(rdata.read().decode('utf-8'))
+        self._children = data['results']
+        return
+
+    @property
+    def body(self):
+        if self._data is None:
+            self.update()
+        return self._data['body']['view']['value'] if self._body_cache is None else self._body_cache
+
+    @body.setter
+    def body(self, value):
+        self._body_cache = value
+        return
+
+    @property
+    def name(self):
+        if self._data is None:
+            self.update()
+        return self._data['title']
+
+    @property
+    def children(self):
+        if self._children is None:
+            self.update_children()
+        return [Page(d['id']) for d in self._children]
+
+    def push(self):
+        if self._data is None:
+            self.update()
+        # STOPPED HERE .. NEED TO INCREMENT VERSION NUMBER
+        self._data['version']['number'] += 1
+        tdata = {
+            "id": str(self.ident),
+            "type": "page",
+            "title": self._data['title'],
+            "version": { "number": str(self._data['version']['number']) },
+            "body": {
+                "storage": {
+                    "representation": "storage",
+                    "value": re.sub(r"[\n\t]", "", self._body_cache),
+                }
+            }
+        }
+        req = urllib.request.Request(
+            '{}/content/{}'.format(self.instance.api, self.ident),
+            data=bytes(json.dumps(tdata), 'utf-8'),
+            headers=self.instance.headers,
+            method='PUT'
+        )
+        with urllib.request.urlopen(req) as rdata:
+            data = json.loads(rdata.read().decode('utf-8'))
+        return
 
