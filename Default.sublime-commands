@@ -1,0 +1,22 @@
+[
+    {
+        "caption": "Confluence: Navigate Confluence",
+        "command": "confluence_navigate"
+    },
+    {
+        "caption": "Confluence: Select Confluence Instance to Navigate",
+        "command": "confluence_select"
+    },
+    {
+        "caption": "Confluence: Create New Confluence Instance",
+        "command": "confluence_new"
+    },
+    {
+        "caption": "Confluence: Edit Existing Confluence Instance",
+        "command": "confluence_edit"
+    },
+    {
+        "caption": "Confluence: Delete Existing Confluence Instance",
+        "command": "confluence_delete"
+    }
+]

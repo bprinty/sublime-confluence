@@ -40,7 +40,7 @@ class cached_property(object):
 
 
 # classes
-# ---------
+# -------
 class Instance(object):
 
     def __init__(self, url, username, password):
@@ -115,9 +115,36 @@ class Page(object):
         self._body_cache = None
         return
 
+    @classmethod
+    def create_new(cls, space, title, ident=None):
+        tdata = {
+            "type": "page",
+            "title": title,
+            "space": {
+                "key": space
+            },
+            "body":{
+                "storage":{
+                    "representation":"storage",
+                    "value":"<p>This is a new page</p>"
+                }
+            }
+        }
+        if ident is not None:
+            tdata['space']['id'] = ident
+        req = urllib.request.Request(
+            '{}/content'.format(open_instance.api),
+            data=bytes(json.dumps(tdata), 'utf-8'),
+            headers=open_instance.headers,
+            method='POST'
+        )
+        with urllib.request.urlopen(req) as rdata:
+            data = json.loads(rdata.read().decode('utf-8'))
+        return cls(data['id'])
+
     def update(self):
         req = urllib.request.Request(
-            '{}/content/{}?expand=body.view,version'.format(self.instance.api, self.ident),
+            '{}/content/{}?expand=body.view,version,space'.format(self.instance.api, self.ident),
             headers=self.instance.headers,
             method='GET'
         )
@@ -157,6 +184,12 @@ class Page(object):
         return self._data['title']
 
     @property
+    def space(self):
+        if self._data is None:
+            self.update()
+        return self._data['space']['key']
+
+    @property
     def children(self):
         if self._children is None:
             self.update_children()
@@ -184,6 +217,15 @@ class Page(object):
             data=bytes(json.dumps(tdata), 'utf-8'),
             headers=self.instance.headers,
             method='PUT'
+        )
+        urllib.request.urlopen(req)
+        return
+
+    def delete(self):
+        req = urllib.request.Request(
+            '{}/content/{}'.format(open_instance.api, self.ident),
+            headers=open_instance.headers,
+            method='DELETE'
         )
         with urllib.request.urlopen(req) as rdata:
             data = json.loads(rdata.read().decode('utf-8'))

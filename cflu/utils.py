@@ -24,11 +24,16 @@ active_window = None
 current_instance = None
 current_config = {}
 existing_instances = []
+page_cache = None
 
 pwd = os.path.dirname(os.path.realpath(__file__))
 server_path = os.path.join(os.path.join(pwd, '..'), 'servers')
-log_path = os.path.join(os.path.join(pwd, '..'), 'confluence.log')
-logging.basicConfig(filename=log_path, level=logging.DEBUG)
+tmp_path = os.path.join(pwd, '..', '.tmp')
+if not os.path.exists(tmp_path):
+    os.makedirs(tmp_path)
+
+log_file = os.path.join(tmp_path, 'confluence.log')
+logging.basicConfig(filename=log_file, level=logging.DEBUG)
 
 
 # decorators
@@ -42,6 +47,8 @@ def update_instancelist(func):
             lambda x: x.replace('.json', ''),
             os.listdir(server_path)
         ))
+        load_state()
+        save_state()
         return func(*args, **kwargs)
     return wrapper
 
@@ -57,6 +64,20 @@ def load_config(name):
     current_config = data
     return
 
+def save_state():
+    global current_instance
+    with open(os.path.join(tmp_path, 'state.json'), 'w') as fi:
+        json.dump({'current_instance': current_instance}, fi)
+    return
+
+def load_state():
+    global current_instance
+    if current_instance is None:
+        sfile = os.path.join(tmp_path, 'state.json')
+        if os.path.exists(sfile):
+            with open(sfile, 'r') as fi:
+                current_instance = json.load(fi)['current_instance']
+    return
 
 def validate_config(config):
     if config.get('url') is None:

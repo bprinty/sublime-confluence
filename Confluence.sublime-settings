@@ -1,3 +1,7 @@
 {
-	"debug": true
+    // refresh rate (in ms) for pulling new content from
+    // confluence decreasing this value will result in
+    // more background computation, which could unecessarily
+    // hog local resources -- be careful when setting this value
+    "refresh_rate": 5000,
 }

@@ -146,9 +146,6 @@ class ConfluenceSelectCommand(sublime_plugin.WindowCommand):
         """
         utils.active_window = self.window
 
-        def validate():
-            return
-
         def done(idx):
             if isinstance(idx, str):
                 utils.current_config['password'] = idx
@@ -174,6 +171,7 @@ class ConfluenceNavigateCommand(sublime_plugin.WindowCommand):
     Mode of interaction for package.
     """
 
+    @utils.update_instancelist
     def run(self):
         """
         Main logic for managing quick panel.
@@ -185,7 +183,10 @@ class ConfluenceNavigateCommand(sublime_plugin.WindowCommand):
             password=utils.current_config.get('password')
         )
         self.instance.update()
-        self.space_navigate()
+        if utils.page_cache is None:
+            self.space_navigate()
+        else:
+            self.page_navigate(**utils.page_cache)
         return
 
     def space_navigate(self):
@@ -199,22 +200,35 @@ class ConfluenceNavigateCommand(sublime_plugin.WindowCommand):
         return
 
     def page_navigate(self, pages, prev=None):
+        utils.page_cache = {
+            'pages': pages,
+            'prev': prev
+        }
         def done(idx):
             def edit(eidx):
                 if eidx < 0:
                     utils.logging.info('Done navigating')
-                # elif idx == 0:
-                #     self.page_navigate(pages, prev=oprev)
+                elif idx == 0:
+                    self.page_navigate(**utils.page_cache)
                 elif eidx == 1:
+                    utils.logging.info('Creating new child page')
+                    self.window.run_command('confluence_new_page', {
+                        'space': pages[idx-1].space,
+                        'ident': pages[idx-1].ident
+                    })
+                elif eidx == 2:
                     utils.logging.info('Editing page')
-                    tfile = '.sublime-confluence-{}'.format(pages[idx-1].ident)
+                    tfile = os.path.join(utils.tmp_path, '.sublime-confluence-{}'.format(pages[idx-1].ident))
                     if os.path.exists(tfile):
                         os.remove(tfile)
                     with open(tfile, 'w') as fi:
                         fi.write(utils.editors.html.parse(pages[idx-1].body))
                     self.window.open_file(tfile)
-                elif eidx == 2:
+                elif eidx == 3:
                     utils.logging.info('Deleting page')
+                    pages[idx-1].delete()
+                elif eidx == 4:
+                    utils.logging.info('Renaming page')
                 return
             if idx < 0:
                 utils.logging.info('Done navigating')
@@ -229,9 +243,38 @@ class ConfluenceNavigateCommand(sublime_plugin.WindowCommand):
                 else:
                     utils.show_quick_panel([
                         ['..'],
+                        ['New Child Page', 'create new child page'],
                         ['Edit Page', 'edit existing page in new tab'],
-                        ['Delete Page', 'delete page on confluence']
+                        ['Delete Page', 'delete page on confluence'],
+                        ['Rename Page', 'rename current page']
                     ], edit, monospace=True)
         utils.show_quick_panel(['..'] + [d.name for d in pages], done, monospace=True)
+        return
+
+
+class ConfluenceNewPageCommand(sublime_plugin.WindowCommand):
+    """
+    Create new child page.
+    """
+
+    def run(self, space, ident):
+        """
+        Main logic for managing quick panel.
+        """
+        utils.active_window = self.window
+
+        def done(name):
+            if name != '':
+                page = orm.Page.create_new(space=space, title=name, ident=ident)
+                utils.logging.info('Editing page')
+                tfile = os.path.join(utils.tmp_path, '.sublime-confluence-{}'.format(page.ident))
+                if os.path.exists(tfile):
+                    os.remove(tfile)
+                with open(tfile, 'w') as fi:
+                    fi.write(utils.editors.html.parse(page.body))
+                self.window.open_file(tfile)
+            return
+
+        utils.show_input_panel('Enter Name of New Page:', '', done)
         return
 
