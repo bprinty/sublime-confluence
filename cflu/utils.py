@@ -88,7 +88,7 @@ def validate_config(config):
         return False
     try:
         req = urllib.request.Request(
-            '{}/confluence/rest/api/space'.format(config.get('url')),
+            '{}/rest/api/space'.format(config.get('url')),
             headers={
                 'Authorization': 'Basic {}'.format(base64.b64encode(
                     str.encode('{}:{}'.format(

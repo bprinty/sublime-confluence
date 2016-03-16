@@ -46,7 +46,7 @@ class Instance(object):
     def __init__(self, url, username, password):
         global open_instance
         self.url = url
-        self.api = '{}/wiki/rest/api'.format(self.url)
+        self.api = '{}/rest/api'.format(self.url)
         self.headers = {
             'Authorization': 'Basic {}'.format(base64.b64encode(str.encode('{}:{}'.format(username, password))).decode('utf-8')),
             'Accept': 'application/json',
