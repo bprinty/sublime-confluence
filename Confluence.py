@@ -227,6 +227,7 @@ class ConfluenceNavigateCommand(sublime_plugin.WindowCommand):
                 elif eidx == 3:
                     utils.logging.info('Deleting page')
                     pages[idx-1].delete()
+                    # TODO: INCLUDE DELETE LOGIC
                 elif eidx == 4:
                     utils.logging.info('Renaming page')
                 return
