@@ -29,16 +29,27 @@ orm = imp.reload(orm)
 # classes
 # -------
 class ConfluencePushPage(sublime_plugin.EventListener):
+    """
+    Perform operations after page save/close events.
+    """
+
     def on_post_save_async(self, view):
         base = os.path.basename(view.file_name())
         if '.sublime-confluence-' in base:
-            ident = int(base.replace('.sublime-confluence-', ''))
+            ident = int(base.replace('.sublime-confluence-', '').replace('.html', ''))
             page = orm.Page(ident)
             with open(view.file_name()) as fi:
                 contents = fi.read()
             page.body = contents
             page.push()
         return
+    
+    def on_post_close_async(self, view):
+        base = os.path.basename(view.file_name())
+        if '.sublime-confluence-' in base:
+            os.remove(base)
+        return
+
 
 
 class ConfluenceMenuCommand(sublime_plugin.WindowCommand):
@@ -218,7 +229,7 @@ class ConfluenceNavigateCommand(sublime_plugin.WindowCommand):
                     })
                 elif eidx == 2:
                     utils.logging.info('Editing page')
-                    tfile = os.path.join(utils.tmp_path, '.sublime-confluence-{}'.format(pages[idx-1].ident))
+                    tfile = os.path.join(utils.tmp_path, '.sublime-confluence-{}.html'.format(pages[idx-1].ident))
                     if os.path.exists(tfile):
                         os.remove(tfile)
                     with open(tfile, 'w') as fi:
@@ -268,7 +279,7 @@ class ConfluenceNewPageCommand(sublime_plugin.WindowCommand):
             if name != '':
                 page = orm.Page.create_new(space=space, title=name, ident=ident)
                 utils.logging.info('Editing page')
-                tfile = os.path.join(utils.tmp_path, '.sublime-confluence-{}'.format(page.ident))
+                tfile = os.path.join(utils.tmp_path, '.sublime-confluence-{}.html'.format(page.ident))
                 if os.path.exists(tfile):
                     os.remove(tfile)
                 with open(tfile, 'w') as fi:
